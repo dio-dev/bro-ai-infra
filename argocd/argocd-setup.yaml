@@ -1,0 +1,165 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-server
+  namespace: argocd
+  annotations:
+    iam.gke.io/gcp-service-account: argocd-sa@PROJECT_ID.iam.gserviceaccount.com
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cmd-params-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cmd-params-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  # Enable insecure mode for internal communication (behind IAP)
+  server.insecure: "true"
+  # Disable TLS for gRPC communication
+  server.grpc.web: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  # Git repository configuration
+  repositories: |
+    - type: git
+      url: https://github.com/YOUR_ORG/bro-ai-infra
+      passwordSecret:
+        name: repo-secret
+        key: password
+      usernameSecret:
+        name: repo-secret
+        key: username
+  
+  # OIDC configuration for Google OAuth
+  oidc.config: |
+    name: Google
+    issuer: https://accounts.google.com
+    clientId: YOUR_OAUTH_CLIENT_ID
+    clientSecret: YOUR_OAUTH_CLIENT_SECRET
+    requestedScopes: ["openid", "profile", "email"]
+    requestedIDTokenClaims: {"groups": {"essential": true}}
+  
+  # RBAC configuration
+  policy.default: role:readonly
+  policy.csv: |
+    p, role:admin, applications, *, */*, allow
+    p, role:admin, clusters, *, *, allow
+    p, role:admin, repositories, *, *, allow
+    
+    p, role:developer, applications, get, */*, allow
+    p, role:developer, applications, sync, */*, allow
+    p, role:developer, applications, action/*, */*, allow
+    
+    g, admin@YOUR_DOMAIN.com, role:admin
+    g, YOUR_DOMAIN.com:dev-team, role:developer
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: repo-secret
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+type: Opaque
+stringData:
+  type: git
+  url: https://github.com/YOUR_ORG/bro-ai-infra
+  username: YOUR_GITHUB_USERNAME
+  password: YOUR_GITHUB_TOKEN
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd-server-nodeport
+  namespace: argocd
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    targetPort: 8080
+    nodePort: 30080
+    name: http
+  - port: 443
+    targetPort: 8080
+    nodePort: 30443
+    name: https
+  selector:
+    app.kubernetes.io/component: server
+    app.kubernetes.io/name: argocd-server
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: argocd-ssl-cert
+  namespace: argocd
+spec:
+  domains:
+    - argocd.YOUR_DOMAIN.com
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server-ingress
+  namespace: argocd
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: argocd-ip
+    networking.gke.io/managed-certificates: argocd-ssl-cert
+    kubernetes.io/ingress.class: gce
+    cloud.google.com/backend-config: '{"default": "argocd-backend-config"}'
+spec:
+  rules:
+  - host: argocd.YOUR_DOMAIN.com
+    http:
+      paths:
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: argocd-server
+            port:
+              number: 80
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: argocd-backend-config
+  namespace: argocd
+spec:
+  healthCheck:
+    checkIntervalSec: 15
+    timeoutSec: 15
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+    type: HTTP
+    requestPath: /healthz
+  sessionAffinity:
+    affinityType: "CLIENT_IP"
+  iap:
+    enabled: true
+    oauthclientCredentials:
+      secretName: oauth-client-secret
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oauth-client-secret
+  namespace: argocd
+type: Opaque
+stringData:
+  client_id: YOUR_IAP_CLIENT_ID
+  client_secret: YOUR_IAP_CLIENT_SECRET 

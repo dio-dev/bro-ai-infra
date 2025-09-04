@@ -1,0 +1,281 @@
+name: Backup & Maintenance
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      backup_type:
+        description: 'Type of backup to run'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - database-only
+          - terraform-state-only
+      environment:
+        description: 'Environment to backup'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+          - both
+
+env:
+  TERRAFORM_VERSION: 1.5.0
+
+jobs:
+  backup-database:
+    name: Backup Database
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.backup_type == 'full' || github.event.inputs.backup_type == 'database-only'
+    strategy:
+      matrix:
+        environment: [production, staging]
+    steps:
+      - name: Skip if not selected
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment != 'both' && github.event.inputs.environment != matrix.environment
+        run: echo "Skipping ${{ matrix.environment }}" && exit 0
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Get database info from Terraform
+        id: db-info
+        working-directory: terraform/environments/${{ matrix.environment == 'production' && 'prod' || 'stage' }}
+        run: |
+          terraform init
+          echo "instance_name=$(terraform output -raw database_instance_name)" >> $GITHUB_OUTPUT
+          echo "connection_name=$(terraform output -raw database_connection_name)" >> $GITHUB_OUTPUT
+
+      - name: Create database backup
+        run: |
+          BACKUP_ID="backup-$(date +%Y%m%d-%H%M%S)-${{ matrix.environment }}"
+          BACKUP_DESCRIPTION="Automated backup for ${{ matrix.environment }} - $(date '+%Y-%m-%d %H:%M:%S UTC')"
+          
+          gcloud sql backups create \
+            --instance=${{ steps.db-info.outputs.instance_name }} \
+            --description="$BACKUP_DESCRIPTION" \
+            --async
+
+      - name: Export database to GCS
+        run: |
+          EXPORT_URI="gs://${{ secrets.GCP_PROJECT_ID }}-backups/database/${{ matrix.environment }}/export-$(date +%Y%m%d-%H%M%S).sql"
+          
+          gcloud sql export sql ${{ steps.db-info.outputs.instance_name }} $EXPORT_URI \
+            --database=app_db \
+            --async
+
+      - name: Verify backup creation
+        run: |
+          echo "Verifying backup was created..."
+          gcloud sql backups list --instance=${{ steps.db-info.outputs.instance_name }} --limit=1
+
+  backup-terraform-state:
+    name: Backup Terraform State
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.backup_type == 'full' || github.event.inputs.backup_type == 'terraform-state-only'
+    strategy:
+      matrix:
+        environment: [production, staging]
+    steps:
+      - name: Skip if not selected
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment != 'both' && github.event.inputs.environment != matrix.environment
+        run: echo "Skipping ${{ matrix.environment }}" && exit 0
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Backup Terraform state
+        working-directory: terraform/environments/${{ matrix.environment == 'production' && 'prod' || 'stage' }}
+        run: |
+          terraform init
+          
+          # Pull current state
+          terraform state pull > "terraform-state-backup-$(date +%Y%m%d-%H%M%S).json"
+          
+          # Upload to GCS backup bucket
+          BACKUP_PATH="terraform-state/${{ matrix.environment }}/terraform-state-backup-$(date +%Y%m%d-%H%M%S).json"
+          gsutil cp "terraform-state-backup-$(date +%Y%m%d-%H%M%S).json" "gs://${{ secrets.GCP_PROJECT_ID }}-backups/$BACKUP_PATH"
+          
+          # Clean up local file
+          rm "terraform-state-backup-$(date +%Y%m%d-%H%M%S).json"
+
+  backup-secrets:
+    name: Backup Secrets
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.backup_type == 'full'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Export Secret Manager secrets metadata
+        run: |
+          # Export secrets metadata (not the actual values for security)
+          gcloud secrets list --format="json" > secrets-metadata-$(date +%Y%m%d-%H%M%S).json
+          
+          # Upload metadata to backup bucket
+          BACKUP_PATH="secrets/metadata/secrets-metadata-$(date +%Y%m%d-%H%M%S).json"
+          gsutil cp "secrets-metadata-$(date +%Y%m%d-%H%M%S).json" "gs://${{ secrets.GCP_PROJECT_ID }}-backups/$BACKUP_PATH"
+          
+          # Clean up
+          rm "secrets-metadata-$(date +%Y%m%d-%H%M%S).json"
+
+  cleanup-old-backups:
+    name: Cleanup Old Backups
+    runs-on: ubuntu-latest
+    needs: [backup-database, backup-terraform-state, backup-secrets]
+    if: always() && (github.event_name == 'schedule' || github.event.inputs.backup_type == 'full')
+    steps:
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Cleanup old database exports
+        run: |
+          # Remove database exports older than 30 days
+          gsutil -m rm -r "gs://${{ secrets.GCP_PROJECT_ID }}-backups/database/**/export-$(date -d '30 days ago' +%Y%m%d)-*.sql" || true
+
+      - name: Cleanup old Terraform state backups
+        run: |
+          # Remove Terraform state backups older than 90 days
+          gsutil -m rm -r "gs://${{ secrets.GCP_PROJECT_ID }}-backups/terraform-state/**/terraform-state-backup-$(date -d '90 days ago' +%Y%m%d)-*.json" || true
+
+      - name: Cleanup old Cloud SQL backups
+        run: |
+          # List and delete automated backups older than 30 days for each environment
+          for env in production staging; do
+            if [ "$env" = "production" ]; then
+              instance_env="prod"
+            else
+              instance_env="stage"
+            fi
+            
+            # Get instance name from a known pattern (adjust as needed)
+            instance_name="${instance_env}-postgresql-$(openssl rand -hex 4)"
+            
+            # Delete old backups (Cloud SQL automatically manages this, but we can be explicit)
+            gcloud sql backups list --instance=$instance_name --format="value(id)" \
+              --filter="startTime < $(date -d '30 days ago' --iso-8601)" | \
+            while read backup_id; do
+              if [ ! -z "$backup_id" ]; then
+                gcloud sql backups delete $backup_id --instance=$instance_name --quiet || true
+              fi
+            done
+          done
+
+  health-check:
+    name: Infrastructure Health Check
+    runs-on: ubuntu-latest
+    needs: [backup-database, backup-terraform-state]
+    if: always()
+    strategy:
+      matrix:
+        environment: [production, staging]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Check infrastructure drift
+        working-directory: terraform/environments/${{ matrix.environment == 'production' && 'prod' || 'stage' }}
+        run: |
+          terraform init
+          terraform plan -detailed-exitcode -var-file="terraform.tfvars.local" || {
+            if [ $? -eq 2 ]; then
+              echo "⚠️ Infrastructure drift detected in ${{ matrix.environment }}!"
+              exit 1
+            fi
+          }
+
+      - name: Check GKE cluster health
+        run: |
+          # Get cluster info from Terraform
+          cd terraform/environments/${{ matrix.environment == 'production' && 'prod' || 'stage' }}
+          cluster_name=$(terraform output -raw cluster_name)
+          cluster_location=$(terraform output -raw cluster_location)
+          
+          # Get cluster status
+          gcloud container clusters describe $cluster_name --region=$cluster_location --format="value(status)"
+
+      - name: Check database connectivity
+        run: |
+          # Get database info
+          cd terraform/environments/${{ matrix.environment == 'production' && 'prod' || 'stage' }}
+          instance_name=$(terraform output -raw database_instance_name)
+          
+          # Check database status
+          gcloud sql instances describe $instance_name --format="value(state)"
+
+  notify-backup-status:
+    name: Notify Backup Status
+    runs-on: ubuntu-latest
+    needs: [backup-database, backup-terraform-state, backup-secrets, cleanup-old-backups, health-check]
+    if: always()
+    steps:
+      - name: Notify success
+        if: needs.backup-database.result == 'success' && needs.backup-terraform-state.result == 'success'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          channel: '#infrastructure'
+          text: '✅ Backup job completed successfully'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Notify failure
+        if: needs.backup-database.result == 'failure' || needs.backup-terraform-state.result == 'failure' || needs.health-check.result == 'failure'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#infrastructure'
+          text: '❌ Backup job failed! Check the logs.'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }} 

@@ -1,0 +1,154 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bro-ai-app
+  namespace: staging
+  labels:
+    app: bro-ai
+    environment: staging
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: bro-ai
+  template:
+    metadata:
+      labels:
+        app: bro-ai
+        environment: staging
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: bro-ai-sa
+      containers:
+      - name: bro-ai
+        image: gcr.io/PROJECT_ID/bro-ai:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 9090
+          name: metrics
+        env:
+        - name: ENVIRONMENT
+          value: "staging"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: connection-string
+        - name: OAUTH_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: oauth-secret
+              key: client-id
+        - name: OAUTH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: oauth-secret
+              key: client-secret
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: config
+        configMap:
+          name: bro-ai-config
+      imagePullSecrets:
+      - name: gcr-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bro-ai-service
+  namespace: staging
+  labels:
+    app: bro-ai
+    environment: staging
+spec:
+  selector:
+    app: bro-ai
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bro-ai-sa
+  namespace: staging
+  annotations:
+    iam.gke.io/gcp-service-account: bro-ai-staging@PROJECT_ID.iam.gserviceaccount.com
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bro-ai-config
+  namespace: staging
+data:
+  app.yaml: |
+    server:
+      host: "0.0.0.0"
+      port: 8080
+    database:
+      max_connections: 10
+      timeout: 30s
+    logging:
+      level: "info"
+      format: "json"
+    metrics:
+      enabled: true
+      port: 9090
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bro-ai-pdb
+  namespace: staging
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: bro-ai 

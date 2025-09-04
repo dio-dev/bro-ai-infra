@@ -1,0 +1,55 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bro-ai-production
+  namespace: argocd
+  labels:
+    environment: production
+    app: bro-ai
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/YOUR_ORG/bro-ai-infra
+    targetRevision: main
+    path: k8s-manifests/production
+    
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+    
+  syncPolicy:
+    # Manual sync for production - require approval
+    automated: null
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    - PruneLast=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+        
+  revisionHistoryLimit: 20
+  
+  ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    jsonPointers:
+    - /spec/replicas
+  - group: ""
+    kind: Service
+    jsonPointers:
+    - /spec/clusterIP
+    
+  info:
+  - name: Environment
+    value: Production
+  - name: Repository
+    value: https://github.com/YOUR_ORG/bro-ai-infra
+  - name: Path
+    value: k8s-manifests/production
+  - name: Sync Policy
+    value: Manual approval required 

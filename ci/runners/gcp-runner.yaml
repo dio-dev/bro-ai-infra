@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: github-actions-runner
+  namespace: github-runners
+  labels:
+    app: github-runner
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: github-runner
+  template:
+    metadata:
+      labels:
+        app: github-runner
+    spec:
+      serviceAccountName: github-runner-sa
+      containers:
+      - name: runner
+        image: sumologic/github-actions-runner:latest
+        env:
+        - name: GITHUB_OWNER
+          value: "YOUR_GITHUB_ORG"
+        - name: GITHUB_REPOSITORY
+          value: "bro-ai-infra"
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: github-token
+              key: token
+        - name: RUNNER_SCOPE
+          value: "repo"
+        - name: RUNNER_NAME_PREFIX
+          value: "gcp-runner"
+        - name: LABELS
+          value: "gcp,self-hosted,linux,x64"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+        - name: runner-temp
+          mountPath: /tmp
+      volumes:
+      - name: docker-sock
+        hostPath:
+          path: /var/run/docker.sock
+      - name: runner-temp
+        emptyDir: {}
+      nodeSelector:
+        cloud.google.com/gke-nodepool: github-runners
+      tolerations:
+      - key: "github-runner"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: github-runner-sa
+  namespace: github-runners
+  annotations:
+    iam.gke.io/gcp-service-account: github-runner@PROJECT_ID.iam.gserviceaccount.com
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-token
+  namespace: github-runners
+type: Opaque
+stringData:
+  token: "YOUR_GITHUB_TOKEN"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: github-runners
+---
+# GitHub Runner Node Pool Configuration
+# Add this to your Terraform GKE module or apply manually
+
+# terraform/modules/kubernetes/github-runner-node-pool.tf
+# resource "google_container_node_pool" "github_runners" {
+#   name       = "${var.environment}-github-runners"
+#   location   = var.region
+#   cluster    = google_container_cluster.primary.name
+#   
+#   autoscaling {
+#     min_node_count = 0
+#     max_node_count = 5
+#   }
+# 
+#   node_config {
+#     preemptible  = true
+#     machine_type = "e2-standard-2"
+#     disk_size_gb = 50
+#     disk_type    = "pd-standard"
+# 
+#     service_account = google_service_account.gke_service_account.email
+#     oauth_scopes = [
+#       "https://www.googleapis.com/auth/cloud-platform"
+#     ]
+# 
+#     labels = {
+#       environment = var.environment
+#       node_pool   = "github-runners"
+#     }
+# 
+#     tags = ["gke-node", "github-runner"]
+# 
+#     taint {
+#       key    = "github-runner"
+#       value  = "true"
+#       effect = "NO_SCHEDULE"
+#     }
+#   }
+# 
+#   management {
+#     auto_repair  = true
+#     auto_upgrade = true
+#   }
+# } 
