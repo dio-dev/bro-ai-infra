@@ -47,7 +47,7 @@ variable "oauth_service_account_roles" {
 
 variable "additional_oauth_clients" {
   description = "Map of additional OAuth clients to create"
-  type        = map(object({
+  type = map(object({
     description = string
   }))
   default = {}

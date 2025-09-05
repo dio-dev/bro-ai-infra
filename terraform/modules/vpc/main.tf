@@ -5,8 +5,8 @@
 resource "google_compute_network" "vpc" {
   name                    = "${var.environment}-vpc"
   auto_create_subnetworks = false
-  routing_mode           = "REGIONAL"
-  description            = "VPC for ${var.environment} environment"
+  routing_mode            = "REGIONAL"
+  description             = "VPC for ${var.environment} environment"
 }
 
 # Public Subnet for GKE nodes
@@ -31,10 +31,10 @@ resource "google_compute_subnetwork" "public_subnet" {
 # Private Subnet for databases and internal services
 resource "google_compute_subnetwork" "private_subnet" {
   name                     = "${var.environment}-private-subnet"
-  ip_cidr_range           = var.private_subnet_cidr
-  region                  = var.region
-  network                 = google_compute_network.vpc.id
-  description             = "Private subnet for ${var.environment} databases"
+  ip_cidr_range            = var.private_subnet_cidr
+  region                   = var.region
+  network                  = google_compute_network.vpc.id
+  description              = "Private subnet for ${var.environment} databases"
   private_ip_google_access = true
 }
 
@@ -48,9 +48,9 @@ resource "google_compute_router" "router" {
 # Cloud NAT for outbound internet access from private resources
 resource "google_compute_router_nat" "nat" {
   name                               = "${var.environment}-nat"
-  router                            = google_compute_router.router.name
-  region                            = var.region
-  nat_ip_allocate_option            = "AUTO_ONLY"
+  router                             = google_compute_router.router.name
+  region                             = var.region
+  nat_ip_allocate_option             = "AUTO_ONLY"
   source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
 
   subnetwork {

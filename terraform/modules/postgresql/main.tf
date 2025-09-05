@@ -12,7 +12,7 @@ resource "google_sql_database_instance" "postgresql" {
   name             = "${var.environment}-postgresql-${random_id.instance_suffix.hex}"
   database_version = var.database_version
   region           = var.region
-  
+
   deletion_protection = var.deletion_protection
 
   settings {
@@ -26,7 +26,7 @@ resource "google_sql_database_instance" "postgresql" {
     backup_configuration {
       enabled                        = true
       start_time                     = "02:00"
-      location                      = var.backup_location
+      location                       = var.backup_location
       point_in_time_recovery_enabled = true
       transaction_log_retention_days = 7
       backup_retention_settings {
@@ -39,8 +39,8 @@ resource "google_sql_database_instance" "postgresql" {
     ip_configuration {
       ipv4_enabled    = true
       private_network = var.vpc_id
-      require_ssl     = true
-      
+      ssl_mode        = "ENCRYPTED_ONLY"
+
       dynamic "authorized_networks" {
         for_each = var.authorized_networks
         content {
@@ -97,7 +97,7 @@ resource "google_sql_user" "default_user" {
 # Additional databases
 resource "google_sql_database" "additional_databases" {
   for_each = toset(var.additional_databases)
-  
+
   name     = each.value
   instance = google_sql_database_instance.postgresql.name
 }
@@ -105,7 +105,7 @@ resource "google_sql_database" "additional_databases" {
 # Additional users
 resource "google_sql_user" "additional_users" {
   for_each = var.additional_users
-  
+
   name     = each.key
   instance = google_sql_database_instance.postgresql.name
   password = each.value.password != null ? each.value.password : random_password.postgres_password.result
@@ -129,9 +129,9 @@ resource "google_service_networking_connection" "private_vpc_connection" {
 # Secret Manager secret for database password
 resource "google_secret_manager_secret" "db_password" {
   secret_id = "${var.environment}-postgresql-password"
-  
+
   replication {
-    automatic = true
+    auto {}
   }
 }
 

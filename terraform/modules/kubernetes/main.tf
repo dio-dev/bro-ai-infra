@@ -17,7 +17,7 @@ resource "google_project_iam_member" "gke_service_account_roles" {
     "roles/stackdriver.resourceMetadata.writer",
     "roles/storage.objectViewer"
   ])
-  
+
   project = var.project_id
   role    = each.value
   member  = "serviceAccount:${google_service_account.gke_service_account.email}"
@@ -27,7 +27,7 @@ resource "google_project_iam_member" "gke_service_account_roles" {
 resource "google_container_cluster" "primary" {
   name     = "${var.environment}-gke-cluster"
   location = var.region
-  
+
   # VPC configuration
   network    = var.vpc_name
   subnetwork = var.subnet_name
@@ -48,7 +48,7 @@ resource "google_container_cluster" "primary" {
     http_load_balancing {
       disabled = false
     }
-    
+
     horizontal_pod_autoscaling {
       disabled = false
     }
@@ -133,10 +133,10 @@ resource "google_container_cluster" "primary" {
 
 # Primary node pool
 resource "google_container_node_pool" "primary_nodes" {
-  name       = "${var.environment}-primary-nodes"
-  location   = var.region
-  cluster    = google_container_cluster.primary.name
-  
+  name     = "${var.environment}-primary-nodes"
+  location = var.region
+  cluster  = google_container_cluster.primary.name
+
   # Autoscaling configuration
   autoscaling {
     min_node_count = var.min_node_count

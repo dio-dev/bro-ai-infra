@@ -16,11 +16,11 @@ resource "google_iap_brand" "oauth_brand" {
 
 # Identity-Aware Proxy for backend service
 resource "google_iap_web_backend_service_iam_binding" "iap_users" {
-  count   = var.enable_iap ? 1 : 0
-  project = var.project_id
+  count               = var.enable_iap ? 1 : 0
+  project             = var.project_id
   web_backend_service = var.backend_service_name
-  role    = "roles/iap.httpsResourceAccessor"
-  members = var.iap_users
+  role                = "roles/iap.httpsResourceAccessor"
+  members             = var.iap_users
 }
 
 # Service Account for OAuth operations
@@ -33,7 +33,7 @@ resource "google_service_account" "oauth_service_account" {
 # IAM bindings for OAuth service account
 resource "google_project_iam_member" "oauth_service_account_roles" {
   for_each = toset(var.oauth_service_account_roles)
-  
+
   project = var.project_id
   role    = each.value
   member  = "serviceAccount:${google_service_account.oauth_service_account.email}"
@@ -42,9 +42,9 @@ resource "google_project_iam_member" "oauth_service_account_roles" {
 # Secret Manager secrets for OAuth configuration
 resource "google_secret_manager_secret" "oauth_client_id" {
   secret_id = "${var.environment}-oauth-client-id"
-  
+
   replication {
-    automatic = true
+    auto {}
   }
 }
 
@@ -55,9 +55,9 @@ resource "google_secret_manager_secret_version" "oauth_client_id_version" {
 
 resource "google_secret_manager_secret" "oauth_client_secret" {
   secret_id = "${var.environment}-oauth-client-secret"
-  
+
   replication {
-    automatic = true
+    auto {}
   }
 }
 
@@ -69,7 +69,7 @@ resource "google_secret_manager_secret_version" "oauth_client_secret_version" {
 # Additional OAuth clients for different services
 resource "google_iap_client" "additional_oauth_clients" {
   for_each = var.additional_oauth_clients
-  
+
   display_name = "${var.environment} ${each.key} OAuth Client"
   brand        = google_iap_brand.oauth_brand.name
 }
@@ -87,7 +87,7 @@ resource "google_service_account_iam_binding" "workload_identity_binding" {
   count              = var.enable_workload_identity ? 1 : 0
   service_account_id = google_service_account.workload_identity_sa[0].name
   role               = "roles/iam.workloadIdentityUser"
-  
+
   members = [
     "serviceAccount:${var.project_id}.svc.id.goog[${var.kubernetes_namespace}/${var.kubernetes_service_account}]"
   ]
@@ -96,7 +96,7 @@ resource "google_service_account_iam_binding" "workload_identity_binding" {
 # IAM roles for Workload Identity service account
 resource "google_project_iam_member" "workload_identity_roles" {
   for_each = var.enable_workload_identity ? toset(var.workload_identity_roles) : []
-  
+
   project = var.project_id
   role    = each.value
   member  = "serviceAccount:${google_service_account.workload_identity_sa[0].email}"
@@ -104,7 +104,7 @@ resource "google_project_iam_member" "workload_identity_roles" {
 
 # Cloud Endpoints service for API management
 resource "google_endpoints_service" "api_service" {
-  count       = var.enable_cloud_endpoints ? 1 : 0
+  count        = var.enable_cloud_endpoints ? 1 : 0
   service_name = var.api_service_name
   project      = var.project_id
 
