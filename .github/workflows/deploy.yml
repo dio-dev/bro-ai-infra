@@ -112,6 +112,31 @@ jobs:
             cd ../..
           else
             echo "✅ State bucket already exists"
+            
+            # Check if bucket is managed by Terraform
+            cd terraform/backend
+            terraform init
+            
+            # Try to import the existing bucket if it's not in state
+            if ! terraform show | grep -q "google_storage_bucket.terraform_state"; then
+              echo "📦 Importing existing bucket into Terraform state..."
+              
+              # Import the bucket
+              if terraform import google_storage_bucket.terraform_state $BUCKET_NAME; then
+                echo "✅ Successfully imported bucket into Terraform state"
+              else
+                echo "⚠️ Could not import bucket, but it exists. This is okay for deployment."
+              fi
+              
+              # Also try to import the state lock object if it exists
+              if gsutil ls gs://$BUCKET_NAME/.terraform_lock > /dev/null 2>&1; then
+                terraform import google_storage_bucket_object.state_lock $BUCKET_NAME/.terraform_lock 2>/dev/null || true
+              fi
+            else
+              echo "✅ Bucket is already managed by Terraform"
+            fi
+            
+            cd ../..
           fi
           
           cd terraform/environments/${TERRAFORM_ENV}
