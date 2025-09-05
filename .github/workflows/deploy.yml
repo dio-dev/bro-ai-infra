@@ -54,6 +54,8 @@ jobs:
 
       - name: Get cluster info from Terraform
         id: cluster-info
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-key.json
         run: |
           # Determine environment based on branch or input
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -81,12 +83,16 @@ jobs:
           echo "Getting cluster info for environment: $ENVIRONMENT (terraform dir: $TERRAFORM_ENV)"
           
           # Set up Google Application Default Credentials for Terraform
-          echo "Configuring Google Application Default Credentials..."
-          gcloud auth application-default print-access-token > /dev/null || {
-            echo "Setting up application default credentials..."
-            gcloud auth activate-service-account --key-file <(echo '${{ secrets.GCP_SA_KEY }}' | base64 -d)
-            gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
-          }
+          echo "Setting up service account credentials for Terraform..."
+          echo '${{ secrets.GCP_SA_KEY }}' | base64 -d > /tmp/gcp-key.json
+          
+          # Verify the credentials file was created
+          if [ ! -f "/tmp/gcp-key.json" ]; then
+            echo "❌ Failed to create credentials file"
+            exit 1
+          fi
+          
+          echo "✅ Credentials file created successfully"
           
           cd terraform/environments/${TERRAFORM_ENV}
           
