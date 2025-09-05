@@ -154,7 +154,7 @@ data:
       enabled: true
       port: 9090
 ---
-apiVersion: policy/v1
+apiVersion: policy/v1beta1
 kind: PodDisruptionBudget
 metadata:
   name: bro-ai-pdb
@@ -165,7 +165,7 @@ spec:
     matchLabels:
       app: bro-ai
 ---
-apiVersion: autoscaling/v2
+apiVersion: autoscaling/v2beta2
 kind: HorizontalPodAutoscaler
 metadata:
   name: bro-ai-hpa

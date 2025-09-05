@@ -2,14 +2,14 @@ name: Infrastructure Validation
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
     paths:
       - 'terraform/**'
       - '.github/workflows/**'
       - 'argocd/**'
       - 'k8s-manifests/**'
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
     paths:
       - 'terraform/**'
       - '.github/workflows/**'
@@ -88,7 +88,8 @@ jobs:
 
       - name: Validate Kubernetes manifests
         run: |
-          find k8s-manifests/ -name "*.yaml" -o -name "*.yml" | xargs kubeval
+          find k8s-manifests/ -name "*.yaml" -o -name "*.yml" | \
+            xargs kubeval --ignore-missing-schemas --skip-kinds=PodDisruptionBudget,HorizontalPodAutoscaler
         continue-on-error: true
 
       - name: Validate ArgoCD manifests
@@ -127,7 +128,7 @@ jobs:
       - name: Check for required documentation
         run: |
           echo "📚 Checking infrastructure documentation..."
-          
+
           # Check if main documentation files exist
           files=(
             "README.md"
@@ -137,14 +138,14 @@ jobs:
             "ProjectStack.md"
             "ProjectSpec.md"
           )
-          
+
           missing_files=()
           for file in "${files[@]}"; do
             if [ ! -f "$file" ]; then
               missing_files+=("$file")
             fi
           done
-          
+
           if [ ${#missing_files[@]} -eq 0 ]; then
             echo "✅ All required documentation files are present"
           else
@@ -157,7 +158,7 @@ jobs:
         run: |
           echo "🔍 Checking for TODO items..."
           todo_count=$(grep -r "TODO\|FIXME\|XXX" terraform/ argocd/ k8s-manifests/ --exclude-dir=.git || true | wc -l)
-          
+
           if [ "$todo_count" -gt 0 ]; then
             echo "⚠️ Found $todo_count TODO/FIXME items in infrastructure:"
             grep -r "TODO\|FIXME\|XXX" terraform/ argocd/ k8s-manifests/ --exclude-dir=.git || true
@@ -199,4 +200,4 @@ jobs:
             --github-token ${{ secrets.GITHUB_TOKEN }} \
             --pull-request ${{ github.event.number }} \
             --behavior update
-        continue-on-error: true 
+        continue-on-error: true

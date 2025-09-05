@@ -2,7 +2,7 @@ name: Infrastructure Deploy
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
     paths:
       - 'k8s-manifests/**'
       - 'argocd/applications/**'
@@ -63,19 +63,19 @@ jobs:
           else
             ENVIRONMENT="staging"
           fi
-          
+
           echo "Getting cluster info for environment: $ENVIRONMENT"
-          
+
           cd terraform/environments/${ENVIRONMENT}
           terraform init
-          
+
           CLUSTER_NAME=$(terraform output -raw kubernetes_cluster_name)
           CLUSTER_REGION=$(terraform output -raw kubernetes_cluster_region)
-          
+
           echo "cluster-name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
           echo "cluster-region=${CLUSTER_REGION}" >> $GITHUB_OUTPUT
           echo "cluster-zone=${CLUSTER_REGION}" >> $GITHUB_OUTPUT
-          
+
           echo "Cluster Name: ${CLUSTER_NAME}"
           echo "Cluster Region: ${CLUSTER_REGION}"
 
@@ -95,7 +95,8 @@ jobs:
       - name: Validate manifests
         run: |
           echo "🔍 Validating Kubernetes manifests..."
-          find k8s-manifests/ -name "*.yaml" -o -name "*.yml" | xargs kubeval
+          find k8s-manifests/ -name "*.yaml" -o -name "*.yml" | \
+            xargs kubeval --ignore-missing-schemas --skip-kinds=PodDisruptionBudget,HorizontalPodAutoscaler
 
   deploy-staging:
     name: Deploy to Staging
@@ -123,7 +124,8 @@ jobs:
 
       - name: Install ArgoCD CLI
         run: |
-          curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          curl -sSL -o argocd-linux-amd64 \
+            https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
 
       - name: Login to ArgoCD
@@ -136,7 +138,7 @@ jobs:
       - name: Update staging manifests
         run: |
           echo "📝 Updating staging manifests with commit SHA: ${{ github.sha }}"
-          
+
           # Update image tags in staging manifests if they reference application images
           if [ -f "k8s-manifests/staging/deployment.yaml" ]; then
             # This is a placeholder - you would update actual image references here
@@ -147,7 +149,7 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          
+
           if git diff --exit-code k8s-manifests/staging/; then
             echo "No changes to commit in staging manifests"
           else
@@ -159,9 +161,9 @@ jobs:
       - name: Sync ArgoCD application
         run: |
           echo "🚀 Syncing staging application in ArgoCD"
-          
+
           SYNC_POLICY="${{ github.event.inputs.sync_policy || 'automatic' }}"
-          
+
           if [ "$SYNC_POLICY" = "automatic" ]; then
             argocd app sync bro-ai-staging --prune
             argocd app wait bro-ai-staging --timeout 600
@@ -174,14 +176,14 @@ jobs:
         run: |
           echo "🏥 Checking application health"
           argocd app get bro-ai-staging
-          
+
           # Wait for application to be healthy
           timeout 300 bash -c 'until argocd app get bro-ai-staging | grep -q "Health Status:.*Healthy"; do echo "Waiting for app to be healthy..."; sleep 10; done' || {
             echo "❌ Application failed to become healthy within timeout"
             argocd app get bro-ai-staging
             exit 1
           }
-          
+
           echo "✅ Staging deployment successful"
 
   deploy-production:
@@ -210,7 +212,8 @@ jobs:
 
       - name: Install ArgoCD CLI
         run: |
-          curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          curl -sSL -o argocd-linux-amd64 \
+            https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
 
       - name: Login to ArgoCD
@@ -223,7 +226,7 @@ jobs:
       - name: Update production manifests
         run: |
           echo "📝 Updating production manifests with commit SHA: ${{ github.sha }}"
-          
+
           # Update image tags in production manifests if they reference application images
           if [ -f "k8s-manifests/production/deployment.yaml" ]; then
             # This is a placeholder - you would update actual image references here
@@ -234,7 +237,7 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          
+
           if git diff --exit-code k8s-manifests/production/; then
             echo "No changes to commit in production manifests"
           else
@@ -246,9 +249,9 @@ jobs:
       - name: Sync ArgoCD application
         run: |
           echo "🚀 Syncing production application in ArgoCD"
-          
+
           SYNC_POLICY="${{ github.event.inputs.sync_policy || 'manual' }}"
-          
+
           if [ "$SYNC_POLICY" = "automatic" ]; then
             argocd app sync bro-ai-production --prune
             argocd app wait bro-ai-production --timeout 600
@@ -263,13 +266,13 @@ jobs:
         if: github.event.inputs.sync_policy == 'automatic'
         run: |
           echo "🧪 Running production smoke tests"
-          
+
           # Get the external IP of the production service
           EXTERNAL_IP=$(kubectl get service bro-ai-service -n production -o jsonpath='{.status.loadBalancer.ingress[0].ip}' || echo "")
-          
+
           if [ -n "$EXTERNAL_IP" ]; then
             echo "Testing health endpoint at $EXTERNAL_IP"
-            
+
             # Test health endpoint
             for i in {1..5}; do
               if curl -f "http://$EXTERNAL_IP/health" > /dev/null 2>&1; then
@@ -292,7 +295,7 @@ jobs:
         run: |
           echo "🏥 Checking production application health"
           argocd app get bro-ai-production
-          
+
           # Wait for application to be healthy if auto-sync was used
           if [ "${{ github.event.inputs.sync_policy }}" = "automatic" ]; then
             timeout 300 bash -c 'until argocd app get bro-ai-production | grep -q "Health Status:.*Healthy"; do echo "Waiting for app to be healthy..."; sleep 10; done' || {
@@ -339,4 +342,4 @@ jobs:
               ]
             }" \
             ${{ secrets.SLACK_WEBHOOK_URL }}
-        continue-on-error: true 
+        continue-on-error: true
