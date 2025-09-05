@@ -80,9 +80,22 @@ jobs:
           
           echo "Getting cluster info for environment: $ENVIRONMENT (terraform dir: $TERRAFORM_ENV)"
           
+          # Set up Google Application Default Credentials for Terraform
+          echo "Configuring Google Application Default Credentials..."
+          gcloud auth application-default print-access-token > /dev/null || {
+            echo "Setting up application default credentials..."
+            gcloud auth activate-service-account --key-file <(echo '${{ secrets.GCP_SA_KEY }}' | base64 -d)
+            gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+          }
+          
           cd terraform/environments/${TERRAFORM_ENV}
+          
+          # Initialize Terraform with backend authentication
+          echo "Initializing Terraform..."
           terraform init
           
+          # Get infrastructure outputs
+          echo "Retrieving cluster information..."
           CLUSTER_NAME=$(terraform output -raw kubernetes_cluster_name)
           CLUSTER_REGION=$(terraform output -raw kubernetes_cluster_region)
           
