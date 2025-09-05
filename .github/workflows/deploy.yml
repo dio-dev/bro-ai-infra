@@ -52,7 +52,7 @@ jobs:
           terraform_version: 1.5.0
           terraform_wrapper: false
 
-            - name: Get cluster info from Terraform
+      - name: Get cluster info from Terraform
         id: cluster-info
         run: |
           # Determine environment based on branch or input

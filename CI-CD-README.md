@@ -154,6 +154,11 @@ The CI/CD pipeline consists of three main workflows:
 - **Network Configuration**: VPC and firewall rules configured
 - **Database Setup**: Cloud SQL instances provisioned
 
+### Environment Directory Mapping
+The CI/CD workflows use logical environment names that map to actual Terraform directories:
+- **Staging Environment**: `staging` → `terraform/environments/stage/`
+- **Production Environment**: `production` → `terraform/environments/prod/`
+
 ## Required GitHub Secrets
 
 Configure the following secrets in your GitHub repository settings:
