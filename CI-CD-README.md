@@ -1,436 +1,396 @@
 # CI/CD Pipeline Documentation
 
-This document provides comprehensive setup and usage instructions for the Bro AI CI/CD pipeline using GitHub Actions, ArgoCD, and GCP.
+## Overview
 
-## 🏗️ Architecture Overview
+This document describes the complete CI/CD pipeline for the Bro AI infrastructure. The pipeline focuses on infrastructure validation, deployment automation, and operational excellence using GitHub Actions and ArgoCD for GitOps-based deployments.
 
-The CI/CD pipeline consists of three main components:
+**Note**: This repository contains only infrastructure code. Application code is maintained separately and deployments reference external application images.
 
-- **GitHub Actions**: Build, test, and container image creation
-- **ArgoCD**: GitOps-style continuous deployment
-- **GCP Integration**: Backup automation and infrastructure management
+## Architecture
 
-### Pipeline Flow
+The CI/CD pipeline consists of three main workflows:
 
-```mermaid
-graph LR
-    A[Code Push] --> B[GitHub Actions]
-    B --> C[Build & Test]
-    C --> D[Docker Build]
-    D --> E[Push to GCR]
-    E --> F[Update K8s Manifests]
-    F --> G[ArgoCD Sync]
-    G --> H[Deploy to GKE]
-    
-    I[Scheduled] --> J[Backup Jobs]
-    J --> K[Database Backup]
-    J --> L[Terraform State Backup]
-    J --> M[Health Checks]
-```
+1. **Infrastructure Validation** (`.github/workflows/build.yml`) - Validates infrastructure code and configurations
+2. **Infrastructure Deploy** (`.github/workflows/deploy.yml`) - Manages infrastructure deployments via ArgoCD
+3. **Backup & Health** (`.github/workflows/backup.yml`) - Automated backup processes and health monitoring
 
-## 📋 Prerequisites
+## Workflows
 
-1. **GitHub Repository**: With admin access for secrets configuration
-2. **GCP Project**: With billing enabled and APIs activated
-3. **GKE Cluster**: Deployed using the Terraform infrastructure
-4. **Domain Name**: For ArgoCD web interface (optional but recommended)
+### 1. Infrastructure Validation Workflow
 
-## 🔐 GitHub Secrets Configuration
+**Trigger**: Push to `main`/`develop` branches or pull requests affecting infrastructure files
+**Purpose**: Comprehensive validation of infrastructure code and configurations
 
-### Required Secrets
+#### Jobs:
 
-Configure these secrets in your GitHub repository (Settings → Secrets and variables → Actions):
+##### Terraform Validation
+- **Terraform Format Check**: Ensures consistent code formatting
+- **Module Validation**: Validates all Terraform modules independently
+- **Environment Validation**: Validates staging and production configurations
+- **Multi-environment Testing**: Tests both staging and production environments
 
-#### **GCP Authentication**
+##### YAML Validation
+- **Workflow Validation**: Validates GitHub Actions workflows
+- **Kubernetes Manifest Validation**: Validates all K8s YAML files
+- **ArgoCD Configuration Validation**: Validates ArgoCD application definitions
+- **Linting**: Comprehensive YAML linting with custom rules
+
+##### Kubernetes Validation
+- **kubeval**: Validates Kubernetes manifests against schema
+- **Manifest Structure**: Ensures proper resource definitions
+- **Cross-environment Validation**: Validates both staging and production manifests
+
+##### Security Scanning
+- **Trivy Filesystem Scan**: Scans infrastructure code for security vulnerabilities
+- **SARIF Integration**: Uploads security findings to GitHub Security tab
+- **Infrastructure Security**: Identifies misconfigurations and security issues
+
+##### Documentation Check
+- **Required Files**: Ensures all documentation files are present
+- **TODO Detection**: Identifies outstanding TODO items in infrastructure
+- **Documentation Completeness**: Validates documentation coverage
+
+##### Cost Estimation (PR only)
+- **Infracost Integration**: Provides cost estimates for infrastructure changes
+- **Multi-environment Costing**: Separate estimates for staging and production
+- **PR Comments**: Automated cost impact comments on pull requests
+
+### 2. Infrastructure Deploy Workflow
+
+**Trigger**: Push to `main`/`develop` branches affecting K8s manifests or manual dispatch
+**Purpose**: Manages infrastructure deployments using GitOps via ArgoCD
+
+#### Jobs:
+
+##### Get Infrastructure Info
+- **Terraform Output Extraction**: Retrieves cluster information from Terraform state
+- **Dynamic Environment Detection**: Determines target environment based on branch/input
+- **Cluster Credential Management**: Configures access to target GKE clusters
+
+##### Validate Manifests
+- **Pre-deployment Validation**: Validates Kubernetes manifests before deployment
+- **Schema Compliance**: Ensures manifests comply with Kubernetes API
+
+##### Deploy to Staging
+**Trigger**: Push to `develop` branch or manual dispatch to staging
+**Environment**: staging (GitHub environment protection)
+
+- **Manifest Updates**: Updates staging manifests with commit references
+- **Git Integration**: Commits and pushes manifest changes
+- **ArgoCD Sync**: Triggers ArgoCD application synchronization
+- **Health Checks**: Monitors application health and readiness
+- **Automatic Rollback**: Fails deployment if health checks don't pass
+
+##### Deploy to Production
+**Trigger**: Push to `main` branch or manual dispatch to production
+**Environment**: production (requires manual approval)
+
+- **Production Safeguards**: Enhanced validation and approval process
+- **Manifest Updates**: Updates production manifests with commit references
+- **Manual/Automatic Sync**: Configurable sync policy via workflow input
+- **Smoke Tests**: Runs production health checks and endpoint testing
+- **Health Monitoring**: Comprehensive application health validation
+
+##### Deployment Notifications
+- **Slack Integration**: Sends deployment status to configured Slack channels
+- **Status Reporting**: Success, failure, or skip notifications
+- **Rich Messages**: Includes repository, branch, commit, and workflow details
+
+### 3. Backup & Health Workflow
+
+**Trigger**: Daily schedule (1 AM UTC) or manual dispatch
+**Purpose**: Automated backup processes and infrastructure health monitoring
+
+#### Jobs:
+
+##### Database Backup
+- **Cloud SQL Backups**: Creates and manages database backups
+- **GCS Export**: Exports database contents to Google Cloud Storage
+- **Backup Validation**: Verifies backup integrity and completeness
+
+##### Infrastructure State Backup
+- **Terraform State Backup**: Backs up Terraform state files
+- **State Validation**: Ensures state file integrity
+- **Version Management**: Maintains versioned state backups
+
+##### Secret Backup
+- **Secret Metadata Export**: Backs up Secret Manager configurations
+- **Security Compliance**: Maintains audit trail for secret management
+- **Access Control**: Ensures proper permissions for backup operations
+
+##### Cleanup Operations
+- **Old Backup Removal**: Removes backups beyond retention period
+- **Storage Optimization**: Manages storage costs through lifecycle policies
+- **Resource Cleanup**: Removes temporary and obsolete resources
+
+##### Health Monitoring
+- **Infrastructure Drift Detection**: Runs `terraform plan` to detect configuration drift
+- **Cluster Health Checks**: Validates GKE cluster status and node health
+- **Database Health**: Checks database connectivity and performance
+- **Service Health**: Validates critical service availability
+
+##### Notification System
+- **Backup Status Alerts**: Notifies team of backup success/failure
+- **Health Check Results**: Reports infrastructure health status
+- **Issue Escalation**: Alerts on critical infrastructure problems
+
+## Prerequisites
+
+### Required Tools
+- **Terraform**: v1.5.0 or later
+- **kubectl**: For Kubernetes cluster interaction
+- **ArgoCD CLI**: For GitOps deployment management
+- **Google Cloud SDK**: For GCP resource management
+
+### GCP Setup
+1. **Service Account**: Create dedicated service account for CI/CD
+2. **IAM Permissions**: Configure required permissions (see Security section)
+3. **API Enablement**: Enable necessary GCP APIs
+4. **Project Configuration**: Set up staging and production projects
+
+### Infrastructure Prerequisites
+- **GKE Clusters**: Deployed via Terraform (staging and production)
+- **ArgoCD Installation**: Deployed and configured on clusters
+- **Network Configuration**: VPC and firewall rules configured
+- **Database Setup**: Cloud SQL instances provisioned
+
+## Required GitHub Secrets
+
+Configure the following secrets in your GitHub repository settings:
+
+### GCP Authentication
 ```bash
-GCP_SA_KEY                  # Service account key (JSON format)
-GCP_PROJECT_ID              # Your GCP project ID
+# GCP Service Account Key (JSON format)
+GCP_SA_KEY="<base64-encoded-service-account-key>"
+
+# GCP Project ID
+GCP_PROJECT_ID="your-gcp-project-id"
 ```
 
-#### **ArgoCD Configuration**
+**To generate the GCP Service Account Key:**
 ```bash
-ARGOCD_SERVER              # ArgoCD server URL (e.g., argocd.your-domain.com)
-ARGOCD_USERNAME            # ArgoCD username (usually 'admin')
-ARGOCD_PASSWORD            # ArgoCD admin password
+# Create service account
+gcloud iam service-accounts create github-actions-sa \
+  --display-name="GitHub Actions Service Account"
+
+# Grant required permissions
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+  --member="serviceAccount:github-actions-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/container.admin"
+
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+  --member="serviceAccount:github-actions-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/storage.admin"
+
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+  --member="serviceAccount:github-actions-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/cloudsql.admin"
+
+# Create and download key
+gcloud iam service-accounts keys create github-actions-key.json \
+  --iam-account=github-actions-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com
+
+# Base64 encode the key for GitHub secret
+base64 -i github-actions-key.json
 ```
 
-#### **Container Registry**
+### ArgoCD Configuration
 ```bash
-# These are usually included in GCP_SA_KEY, but can be separate:
-GCR_HOSTNAME               # gcr.io (or your preferred registry)
-GCR_PROJECT_ID             # Same as GCP_PROJECT_ID typically
+# ArgoCD server URL
+ARGOCD_SERVER="argocd.your-domain.com"
+
+# ArgoCD admin username
+ARGOCD_USERNAME="admin"
+
+# ArgoCD admin password
+ARGOCD_PASSWORD="your-argocd-password"
 ```
 
-#### **Notifications (Optional)**
+### Notification Integration
 ```bash
-SLACK_WEBHOOK_URL          # Slack webhook for deployment notifications
-CODECOV_TOKEN              # Codecov token for coverage reports
+# Slack webhook URL for notifications
+SLACK_WEBHOOK_URL="https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
 ```
 
-### Generating GCP Service Account Key
+### Cost Monitoring (Optional)
+```bash
+# Infracost API key for cost estimation
+INFRACOST_API_KEY="your-infracost-api-key"
+```
 
-1. **Create Service Account**:
-   ```bash
-   gcloud iam service-accounts create github-actions \
-     --display-name="GitHub Actions CI/CD" \
-     --description="Service account for GitHub Actions workflows"
-   ```
+## Setup Instructions
 
-2. **Assign Required Roles**:
-   ```bash
-   PROJECT_ID="your-project-id"
-   SA_EMAIL="github-actions@$PROJECT_ID.iam.gserviceaccount.com"
-   
-   # Core CI/CD roles
-   gcloud projects add-iam-policy-binding $PROJECT_ID \
-     --member="serviceAccount:$SA_EMAIL" \
-     --role="roles/container.admin"
-   
-   gcloud projects add-iam-policy-binding $PROJECT_ID \
-     --member="serviceAccount:$SA_EMAIL" \
-     --role="roles/storage.admin"
-   
-   gcloud projects add-iam-policy-binding $PROJECT_ID \
-     --member="serviceAccount:$SA_EMAIL" \
-     --role="roles/cloudsql.admin"
-   
-   # Terraform state access
-   gcloud projects add-iam-policy-binding $PROJECT_ID \
-     --member="serviceAccount:$SA_EMAIL" \
-     --role="roles/viewer"
-   ```
+### 1. Repository Configuration
+```bash
+# Clone the repository
+git clone https://github.com/your-org/bro-ai-infra.git
+cd bro-ai-infra
 
-3. **Generate and Download Key**:
-   ```bash
-   gcloud iam service-accounts keys create github-actions-key.json \
-     --iam-account=$SA_EMAIL
-   ```
+# Configure GitHub secrets (via GitHub UI or CLI)
+gh secret set GCP_SA_KEY --body "$(base64 -i github-actions-key.json)"
+gh secret set GCP_PROJECT_ID --body "your-gcp-project-id"
+gh secret set ARGOCD_SERVER --body "argocd.your-domain.com"
+gh secret set ARGOCD_USERNAME --body "admin"
+gh secret set ARGOCD_PASSWORD --body "your-argocd-password"
+gh secret set SLACK_WEBHOOK_URL --body "your-slack-webhook-url"
+```
 
-4. **Add to GitHub Secrets**:
-   - Copy the entire contents of `github-actions-key.json`
-   - Paste as the value for `GCP_SA_KEY` secret
-
-## 🚀 Setup Instructions
-
-### 1. Infrastructure Preparation
-
-First, ensure your infrastructure is deployed:
-
+### 2. Infrastructure Deployment
 ```bash
 # Deploy infrastructure using Terraform
-cd terraform
-make deploy-stage    # Deploy staging environment
-make deploy-prod     # Deploy production environment
+cd terraform/environments/stage
+terraform init
+terraform plan
+terraform apply
+
+# Deploy ArgoCD
+kubectl apply -f ../../argocd/argocd-setup.yaml
+./../../ci/setup-scripts/install-argocd.sh
 ```
 
-### 2. ArgoCD Installation
-
-Install ArgoCD on your GKE cluster:
-
+### 3. ArgoCD Application Setup
 ```bash
-# Get GKE credentials
-gcloud container clusters get-credentials stage-gke-cluster --region us-central1
+# Apply ArgoCD applications
+kubectl apply -f argocd/applications/bro-ai-staging.yaml
+kubectl apply -f argocd/applications/bro-ai-production.yaml
 
-# Install ArgoCD using the provided script
-./ci/setup-scripts/install-argocd.sh \
-  --project-id your-project-id \
-  --github-org your-github-org \
-  --domain your-domain.com
+# Verify application status
+argocd app list
+argocd app get bro-ai-staging
 ```
 
-### 3. GitHub Repository Configuration
+## Usage Guide
 
-1. **Enable GitHub Actions**:
-   - Go to repository Settings → Actions → General
-   - Allow all actions and reusable workflows
+### Infrastructure Changes
+1. **Make Changes**: Modify Terraform configurations or Kubernetes manifests
+2. **Create PR**: Submit pull request for review
+3. **Validation**: Automated validation runs on PR
+4. **Review**: Team reviews changes and validation results
+5. **Merge**: Merge to `develop` for staging or `main` for production
+6. **Deploy**: Automated deployment via ArgoCD
 
-2. **Configure Environments**:
-   - Go to Settings → Environments
-   - Create `staging` and `production` environments
-   - Add protection rules for production (require reviews)
+### Manual Deployments
+```bash
+# Trigger manual deployment
+gh workflow run deploy.yml \
+  --field environment=staging \
+  --field sync_policy=automatic
 
-3. **Add Repository Secrets**:
-   - Go to Settings → Secrets and variables → Actions
-   - Add all required secrets listed above
-
-### 4. Docker Configuration
-
-Create a Dockerfile in your project root:
-
-```dockerfile
-# Multi-stage build for Rust application
-FROM rust:1.70 as builder
-
-WORKDIR /app
-COPY Cargo.toml Cargo.lock ./
-COPY src ./src
-
-# Build the application
-RUN cargo build --release
-
-# Runtime stage
-FROM debian:bookworm-slim
-
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    libssl3 \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-# Copy binary from builder stage
-COPY --from=builder /app/target/release/bro-ai /app/bro-ai
-
-# Create non-root user
-RUN useradd -r -u 1000 appuser
-USER appuser
-
-EXPOSE 8080
-CMD ["./bro-ai"]
+# Check deployment status
+gh run list --workflow=deploy.yml
+gh run view <run-id>
 ```
-
-## 📊 Workflow Details
-
-### Build & Test Workflow (`.github/workflows/build.yml`)
-
-**Triggers**: Push to `main`/`develop`, Pull Requests  
-**Purpose**: Validate code quality and build artifacts
-
-**Jobs**:
-- **Lint**: Code formatting and Clippy checks
-- **Test**: Run tests on multiple Rust versions
-- **Build**: Compile for multiple targets
-- **Coverage**: Generate code coverage reports
-- **Docker Build**: Create and push container images
-- **Security Scan**: Vulnerability scanning with Trivy
-
-### Deploy Workflow (`.github/workflows/deploy.yml`)
-
-**Triggers**: Push to `main`/`develop`, Manual dispatch  
-**Purpose**: Deploy applications using ArgoCD
-
-**Jobs**:
-- **Get Infrastructure Info**: Extract cluster details from Terraform
-- **Deploy Staging**: Automatic deployment to staging
-- **Deploy Production**: Manual deployment to production
-- **Notifications**: Slack notifications on success/failure
-
-### Backup Workflow (`.github/workflows/backup.yml`)
-
-**Triggers**: Daily schedule (2 AM UTC), Manual dispatch  
-**Purpose**: Automated backup and health checking
-
-**Jobs**:
-- **Database Backup**: Cloud SQL backups and exports
-- **Terraform State Backup**: Infrastructure state preservation
-- **Secrets Backup**: Metadata backup for Secret Manager
-- **Cleanup**: Remove old backups
-- **Health Check**: Infrastructure drift detection
-
-## 🔄 Usage Guide
-
-### Triggering Deployments
-
-#### Automatic Deployments
-- **Staging**: Push to `develop` branch
-- **Production**: Push to `main` branch (requires approval)
-
-#### Manual Deployments
-1. Go to Actions → Deploy workflow
-2. Click "Run workflow"
-3. Select environment and options
-4. Click "Run workflow"
-
-### Managing Secrets
-
-#### Adding New Secrets
-1. **In GCP Secret Manager**:
-   ```bash
-   gcloud secrets create new-secret-name --data-file=secret-file.txt
-   ```
-
-2. **In Kubernetes**:
-   ```bash
-   kubectl create secret generic new-secret \
-     --from-literal=key=value \
-     --namespace=staging
-   ```
-
-3. **Update Kubernetes manifests** to reference the new secret
 
 ### Monitoring Deployments
+```bash
+# Check ArgoCD application status
+argocd app get bro-ai-staging
+argocd app sync bro-ai-staging
 
-#### ArgoCD Web Interface
-- Access: `https://argocd.your-domain.com`
-- Login with admin credentials
-- Monitor application sync status
+# Monitor Kubernetes resources
+kubectl get pods -n staging
+kubectl get services -n staging
+kubectl logs -f deployment/bro-ai-app -n staging
+```
 
-#### GitHub Actions
-- Go to repository → Actions tab
-- View workflow runs and logs
-- Monitor deployment status
+### Backup Operations
+```bash
+# Trigger manual backup
+gh workflow run backup.yml
 
-#### GCP Console
-- **GKE**: Check cluster and pod status
-- **Cloud SQL**: Monitor database health
-- **Cloud Storage**: Verify backup completion
+# Check backup status
+gsutil ls gs://your-backup-bucket/
 
-## 🛠️ Troubleshooting
+# Verify database backups
+gcloud sql backups list --instance=your-instance
+```
+
+## Troubleshooting
 
 ### Common Issues
 
-#### 1. **Build Failures**
+#### Terraform State Lock
 ```bash
-# Check Rust toolchain
-rustc --version
-cargo --version
-
-# Update dependencies
-cargo update
-
-# Clear cache
-cargo clean
+# Force unlock if needed (use with caution)
+terraform force-unlock <lock-id>
 ```
 
-#### 2. **Docker Build Issues**
+#### ArgoCD Sync Issues
 ```bash
-# Test build locally
-docker build -t test-image .
+# Manual sync with prune
+argocd app sync bro-ai-staging --prune
 
-# Check for layer caching issues
-docker build --no-cache -t test-image .
+# Hard refresh
+argocd app refresh bro-ai-staging --hard
+
+# Check application health
+argocd app get bro-ai-staging
 ```
 
-#### 3. **ArgoCD Sync Issues**
+#### GKE Authentication
 ```bash
-# Check application status
-kubectl get applications -n argocd
+# Re-authenticate with cluster
+gcloud container clusters get-credentials cluster-name --region region
 
-# Force sync
-argocd app sync bro-ai-staging --force
-
-# Check logs
-kubectl logs -n argocd deployment/argocd-application-controller
+# Check permissions
+kubectl auth can-i create deployments --namespace staging
 ```
 
-#### 4. **Authentication Problems**
+#### Secret Management
 ```bash
-# Verify service account permissions
-gcloud projects get-iam-policy your-project-id
-
-# Test gcloud authentication
-gcloud auth application-default print-access-token
+# Verify secret access
+gcloud secrets versions access latest --secret="database-password"
 
 # Check Workload Identity
-kubectl describe serviceaccount bro-ai-sa -n staging
+kubectl describe serviceaccount bro-ai-service-account -n staging
 ```
 
-### Debugging Commands
-
+### Debug Commands
 ```bash
-# Check GitHub Actions logs
-gh run list --repo your-org/bro-ai-infra
-gh run view RUN_ID --log
+# Check workflow logs
+gh run view <run-id> --log
 
-# Verify ArgoCD applications
-argocd app list
-argocd app get bro-ai-staging
+# Kubernetes debugging
+kubectl describe pod <pod-name> -n <namespace>
+kubectl logs <pod-name> -n <namespace>
 
-# Check Kubernetes resources
-kubectl get all -n staging
-kubectl describe pod POD_NAME -n staging
-
-# Verify secrets
-kubectl get secrets -n staging
-gcloud secrets list
+# ArgoCD debugging
+argocd app logs bro-ai-staging
+argocd app manifests bro-ai-staging
 ```
 
-## 📈 Monitoring and Metrics
+## Monitoring and Alerting
 
-### Key Metrics to Monitor
+### GitHub Actions
+- **Workflow Status**: Monitor workflow success/failure rates
+- **Action Insights**: Review action performance and usage
+- **Security Alerts**: Monitor security findings and vulnerabilities
 
-#### CI/CD Pipeline
-- **Build Success Rate**: >95%
-- **Build Duration**: <10 minutes
-- **Deployment Frequency**: Track daily/weekly deployments
-- **Lead Time**: From commit to production
+### ArgoCD
+- **Application Health**: Monitor application sync and health status
+- **Sync Frequency**: Track deployment frequency and patterns
+- **Drift Detection**: Monitor configuration drift and corrections
 
-#### Infrastructure Health
-- **Cluster Uptime**: >99.9%
-- **Pod Restart Rate**: <5% daily
-- **Resource Utilization**: CPU/Memory <80%
-- **Backup Success Rate**: 100%
+### Infrastructure
+- **Resource Utilization**: Monitor CPU, memory, and storage usage
+- **Cost Tracking**: Monitor infrastructure costs and optimization opportunities
+- **Security Posture**: Continuous security monitoring and compliance
 
-### Setting Up Alerts
+## Security Best Practices
 
-1. **Slack Notifications**:
-   - Configure webhook URL in secrets
-   - Customize notification messages in workflows
+### Secret Management
+- **Rotation**: Regularly rotate service account keys and passwords
+- **Least Privilege**: Grant minimum required permissions
+- **Audit**: Regular audit of secret access and usage
 
-2. **Email Alerts**:
-   - Use GitHub notification settings
-   - Configure GCP monitoring alerts
+### Access Control
+- **Branch Protection**: Protect main branches with required reviews
+- **Environment Protection**: Use GitHub environment protection rules
+- **RBAC**: Implement role-based access control in Kubernetes
 
-3. **Custom Dashboards**:
-   - Create Grafana dashboards for metrics
-   - Use Google Cloud Monitoring
+### Security Scanning
+- **Continuous Scanning**: Automated security scanning in CI/CD
+- **Vulnerability Management**: Regular updates and patches
+- **Compliance**: Maintain compliance with security standards
 
-## 🔒 Security Best Practices
-
-### Secrets Management
-- ✅ Use GitHub Secrets for sensitive data
-- ✅ Rotate service account keys regularly
-- ✅ Limit secret access with environment protection
-- ✅ Use Workload Identity in Kubernetes
-
-### Container Security
-- ✅ Use non-root users in containers
-- ✅ Scan images for vulnerabilities
-- ✅ Use minimal base images
-- ✅ Enable security contexts
-
-### Network Security
-- ✅ Private GKE clusters
-- ✅ Network policies for pod communication
-- ✅ IAP for ArgoCD access
-- ✅ TLS encryption everywhere
-
-## 📚 Additional Resources
-
-### Documentation Links
-- [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [ArgoCD Documentation](https://argo-cd.readthedocs.io/)
-- [GKE Best Practices](https://cloud.google.com/kubernetes-engine/docs/best-practices)
-- [Terraform GCP Provider](https://registry.terraform.io/providers/hashicorp/google/latest/docs)
-
-### Example Commands
-
-#### Deploy Specific Image Tag
-```bash
-# Update image tag in manifests
-sed -i 's/image: gcr.io\/PROJECT\/bro-ai:.*/image: gcr.io\/PROJECT\/bro-ai:v1.2.3/' k8s-manifests/staging/deployment.yaml
-
-# Commit and push
-git add k8s-manifests/staging/deployment.yaml
-git commit -m "Deploy v1.2.3 to staging"
-git push
-```
-
-#### Manual Backup
-```bash
-# Trigger backup workflow
-gh workflow run backup.yml \
-  --field environment=production \
-  --field backup_type=full
-```
-
-#### Rollback Deployment
-```bash
-# Via ArgoCD
-argocd app rollback bro-ai-production
-
-# Via kubectl
-kubectl rollout undo deployment/bro-ai-app -n production
-```
-
-This CI/CD pipeline provides a robust, secure, and automated deployment process for the Bro AI infrastructure, with comprehensive monitoring and backup capabilities. 
+This CI/CD pipeline provides robust infrastructure management capabilities with strong emphasis on automation, security, and operational excellence. 

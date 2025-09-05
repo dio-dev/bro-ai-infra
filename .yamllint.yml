@@ -1,0 +1,23 @@
+extends: default
+
+rules:
+  line-length:
+    max: 120
+    level: warning
+  
+  indentation:
+    spaces: 2
+    
+  truthy:
+    allowed-values: ['true', 'false', 'on', 'off', 'yes', 'no']
+    check-keys: false
+    
+  comments:
+    min-spaces-from-content: 1
+    
+  document-start: disable
+  
+  # Allow long lines in GitHub Actions workflows for commands
+  key-duplicates: enable
+  new-line-at-end-of-file: enable
+  trailing-spaces: enable 

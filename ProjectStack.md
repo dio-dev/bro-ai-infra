@@ -1,267 +1,234 @@
-# Project Stack - Bro AI Infrastructure
+# Bro AI Infrastructure Technology Stack
 
-This document outlines the complete technology stack and infrastructure architecture for the Bro AI project.
+## Overview
+This repository contains the complete infrastructure-as-code setup for the Bro AI platform. It provides scalable, secure, and maintainable infrastructure on Google Cloud Platform using modern DevOps practices.
 
-## Infrastructure Layer
+## Core Infrastructure
 
-### Cloud Platform
+### Cloud Provider
 - **Google Cloud Platform (GCP)**: Primary cloud provider
-- **Regions**: Multi-region deployment (us-central1 primary)
-- **Project Structure**: Environment-based separation (prod, stage)
+  - **Google Kubernetes Engine (GKE)**: Managed Kubernetes for container orchestration
+  - **Google Cloud SQL**: Managed PostgreSQL database service
+  - **Google Cloud Storage**: Object storage for backups and static assets
+  - **Google Secret Manager**: Secure storage for secrets and credentials
+  - **Google Container Registry (GCR)**: Docker image storage and management
+  - **Google Cloud IAM**: Identity and access management
+  - **Google Cloud VPC**: Virtual private cloud networking
 
-### Infrastructure as Code
-- **Terraform**: Infrastructure provisioning and management
-- **Version**: >= 1.0
-- **State Management**: Google Cloud Storage with state locking
-- **Provider**: Google Cloud Provider v5.0+
+### Infrastructure as Code (IaC)
+- **Terraform v1.5.0**: Infrastructure provisioning and management
+  - Modular architecture with reusable components
+  - State management with Google Cloud Storage backend
+  - Support for multiple environments (staging, production)
+  - Automated validation and formatting
 
-### Networking
-- **VPC**: Custom Virtual Private Cloud with regional routing
-- **Subnets**: 
-  - Public subnet for GKE nodes
-  - Private subnet for databases and internal services
-- **Security**: Firewall rules, Cloud NAT, Private Google Access
-- **Load Balancing**: Google Cloud Load Balancer
-- **DNS**: Cloud DNS for domain management
+### Networking & Security
+- **VPC (Virtual Private Cloud)**: Isolated network environment
+  - Public subnets for GKE nodes with internet access
+  - Private subnets for databases and internal services
+  - Cloud NAT for outbound internet access from private resources
+- **Firewall Rules**: Network security policies
+  - GKE cluster communication
+  - SSH access for debugging
+  - PostgreSQL access control
+- **Identity-Aware Proxy (IAP)**: Application-level access control
+- **OAuth 2.0**: Authentication and authorization
+- **Workload Identity**: Secure pod-to-GCP service authentication
 
-## Container Orchestration
+## Container & Orchestration
 
 ### Kubernetes Platform
 - **Google Kubernetes Engine (GKE)**: Managed Kubernetes service
-- **Cluster Type**: Regional private clusters
-- **Node Pools**: Auto-scaling with mixed instance types
-- **Network Policy**: Calico for pod-to-pod traffic control
-- **Service Mesh**: Istio (optional for advanced traffic management)
+  - Auto-scaling node pools
+  - Private cluster configuration
+  - Workload Identity integration
+  - Regional clusters for high availability
 
-### Container Registry
-- **Artifact Registry**: Container image storage and management
-- **Vulnerability Scanning**: Built-in security scanning
-- **Image Signing**: Binary Authorization for deployment security
+### Container Management
+- **Google Container Registry (GCR)**: Docker image registry
+- **Trivy**: Container image vulnerability scanning
+- **Kubernetes Manifests**: Declarative container deployments
+  - Staging and production environments
+  - Resource limits and requests
+  - Health checks and readiness probes
+  - Horizontal Pod Autoscaling (HPA)
 
-## Data Layer
+## Database & Storage
 
-### Primary Database
-- **Cloud SQL PostgreSQL**: Managed PostgreSQL service
-- **Version**: PostgreSQL 15
-- **High Availability**: Regional deployment with automatic failover
-- **Backup**: Automated daily backups with point-in-time recovery
-- **Security**: Private IP only, SSL/TLS encryption
+### Database Solutions
+- **Google Cloud SQL**: Managed PostgreSQL database
+  - Automated backups and point-in-time recovery
+  - High availability with regional instances
+  - Private IP connectivity
+  - Integrated with Secret Manager for credentials
 
-### Caching & Session Storage
-- **Cloud Memorystore (Redis)**: In-memory caching layer
-- **Session Management**: Redis-based session storage
-- **Cache Strategy**: Application-level caching with TTL
-
-### Object Storage
-- **Google Cloud Storage**: File and blob storage
-- **Bucket Classes**: Multi-regional for critical data, regional for logs
-- **Lifecycle Management**: Automated data retention policies
-- **CDN**: Cloud CDN for global content delivery
-
-## Security & Identity
-
-### Authentication & Authorization
-- **Google Cloud Identity**: Enterprise identity management
-- **OAuth 2.0/OIDC**: Industry-standard authentication protocols
-- **Identity-Aware Proxy (IAP)**: Application-level access control
-- **Workload Identity**: Secure pod-to-service authentication
-
-### Secret Management
-- **Google Secret Manager**: Centralized secret storage
-- **Encryption**: Customer-managed encryption keys (CMEK) support
-- **Rotation**: Automated secret rotation policies
-- **Access Control**: IAM-based secret access
-
-### Security Monitoring
-- **Cloud Security Command Center**: Security posture management
-- **VPC Flow Logs**: Network traffic monitoring
-- **Audit Logs**: Comprehensive audit trail
-- **Binary Authorization**: Container image attestation
-
-## Application Layer
-
-### Runtime Environment
-- **Kubernetes Deployments**: Containerized application workloads
-- **Horizontal Pod Autoscaler**: Dynamic scaling based on metrics
-- **Resource Limits**: CPU and memory constraints
-- **Health Checks**: Liveness and readiness probes
-
-### API Gateway
-- **Google Cloud Endpoints**: API management and monitoring
-- **API Authentication**: OAuth 2.0 and API key validation
-- **Rate Limiting**: Request throttling and quota management
-- **Analytics**: API usage metrics and monitoring
-
-### Message Queue
-- **Google Cloud Pub/Sub**: Asynchronous messaging service
-- **Topics & Subscriptions**: Event-driven architecture
-- **Dead Letter Queues**: Error handling and retry logic
-- **Push/Pull Delivery**: Flexible message delivery patterns
+### Storage Solutions
+- **Google Cloud Storage (GCS)**: Object storage
+  - Terraform state backend
+  - Database backups
+  - Application artifacts
+  - Lifecycle management policies
 
 ## CI/CD & DevOps
 
 ### Continuous Integration
-- **GitHub Actions**: Build, test, and integration workflows
-- **Rust Toolchain**: Cargo build system with multi-target compilation
-- **Code Quality**: Clippy linting, rustfmt formatting, security audits
-- **Testing**: Unit tests, integration tests, code coverage with tarpaulin
-- **Artifact Management**: Multi-stage Docker builds with layer caching
+- **GitHub Actions**: CI/CD automation platform
+  - Infrastructure validation workflows
+  - Terraform format checking and validation
+  - Kubernetes manifest validation with kubeval
+  - YAML linting
+  - Security scanning with Trivy
+  - Cost estimation with Infracost
 
 ### Continuous Deployment
-- **ArgoCD**: GitOps-style continuous deployment
-- **GitOps Workflow**: Declarative configuration management
-- **Multi-Environment**: Automated staging, manual production approval
-- **Rollback Capability**: Automated rollback on failure detection
-- **Sync Policies**: Environment-specific deployment strategies
-
-### Container Management
-- **Docker**: Multi-stage builds for Rust applications
-- **Google Container Registry**: Container image storage
-- **Image Scanning**: Trivy vulnerability scanning
-- **Security**: Non-root containers, minimal base images
-- **Optimization**: Layer caching, dependency pre-building
+- **ArgoCD**: GitOps continuous delivery
+  - Automated sync from Git repositories
+  - Application health monitoring
+  - Rollback capabilities
+  - Multi-environment support
+- **GitOps Workflow**: Git-centric deployment strategy
+  - Declarative infrastructure and application configs
+  - Audit trail through Git history
+  - Automated drift detection
 
 ### Build & Test Infrastructure
-- **GitHub-hosted Runners**: Standard CI/CD execution environment
-- **Self-hosted Runners**: Optional GKE-based runners for specific workloads
-- **Build Matrix**: Multi-platform and multi-version testing
-- **Caching Strategy**: Cargo registry and build artifact caching
-- **Parallel Execution**: Concurrent job execution for faster feedback
+- **GitHub Actions Workflows**:
+  - `Infrastructure Validation`: Terraform and Kubernetes validation
+  - `Infrastructure Deploy`: ArgoCD-based deployment pipeline
+  - `Backup`: Automated backup processes
+- **Self-hosted Runners** (Optional): Custom GitHub Actions runners on GKE
 
 ## Monitoring & Observability
 
 ### Metrics & Monitoring
-- **Google Cloud Monitoring**: Infrastructure and application metrics
-- **Prometheus**: Custom metrics collection
-- **Grafana**: Advanced dashboards and visualization
-- **Alerting**: Multi-channel alert notifications
+- **Prometheus**: Metrics collection and alerting
+- **Health Checks**: Application and infrastructure health monitoring
+- **Resource Monitoring**: CPU, memory, and disk usage tracking
 
 ### Logging
-- **Google Cloud Logging**: Centralized log aggregation
-- **Structured Logging**: JSON-formatted log entries
+- **Google Cloud Logging**: Centralized log management
+- **Structured Logging**: JSON-formatted logs for better parsing
 - **Log Retention**: Configurable retention policies
-- **Log Analysis**: BigQuery integration for log analytics
 
-### Tracing
-- **Cloud Trace**: Distributed tracing for microservices
-- **OpenTelemetry**: Open-source observability framework
-- **Performance Insights**: Request latency and bottleneck analysis
+## Security & Compliance
 
-### Error Tracking
-- **Cloud Error Reporting**: Automated error detection and grouping
-- **Sentry Integration**: Enhanced error tracking and debugging
-- **Alert Integration**: Real-time error notifications
+### Secret Management
+- **Google Secret Manager**: Centralized secret storage
+  - Database passwords
+  - API keys and tokens
+  - OAuth credentials
+- **Workload Identity**: Secure pod authentication to GCP services
 
-## Development & Deployment
+### Security Scanning
+- **Trivy**: Infrastructure and container security scanning
+- **GitHub Security**: SARIF report integration
+- **Dependency Scanning**: Automated vulnerability detection
 
-### Source Control & Collaboration
-- **GitHub**: Git repository hosting and collaboration
-- **Branch Strategy**: GitFlow with main/develop branches
-- **Pull Request Workflow**: Code review and approval process
-- **Protected Branches**: Branch protection rules for production
-
-### Build Pipeline
-- **Multi-stage Builds**: Optimized Docker image creation
-- **Dependency Caching**: Cargo registry and build cache optimization
-- **Target Compilation**: x86_64-unknown-linux-gnu and musl targets
-- **Security Scanning**: Automated vulnerability assessment
-- **Quality Gates**: Automated testing and linting requirements
-
-### Deployment Strategy
-- **Environment Promotion**: Staging → Production workflow
-- **Blue-Green Deployment**: Zero-downtime deployments
-- **Canary Releases**: Gradual rollout strategies
-- **Infrastructure as Code**: Terraform-managed infrastructure
-- **Configuration Management**: Environment-specific configurations
-
-### Automation & Orchestration
-- **Automated Backups**: Daily database and state backups
-- **Health Monitoring**: Infrastructure drift detection
-- **Cleanup Jobs**: Automated old backup removal
-- **Notification System**: Slack integration for deployment status
-- **Secret Rotation**: Automated credential management
+### Access Control
+- **IAM Roles**: Principle of least privilege
+- **Service Accounts**: Dedicated accounts for automation
+- **Identity-Aware Proxy**: Application-level access control
 
 ## Backup & Disaster Recovery
 
-### Data Backup
-- **Database Backups**: Automated PostgreSQL backups
-- **Cross-Region Replication**: Geographic redundancy
-- **Point-in-Time Recovery**: Granular data restoration
-- **Backup Validation**: Regular restore testing
+### Automated Backups
+- **Database Backups**: Daily Cloud SQL backups
+- **Terraform State Backups**: Regular state file backups
+- **Secret Metadata Backups**: Secret Manager backup processes
+- **Retention Policies**: Automated cleanup of old backups
 
-### Infrastructure Backup
-- **Terraform State**: Version-controlled infrastructure state
-- **Configuration Management**: GitOps-based configuration
-- **Disaster Recovery Plan**: Documented recovery procedures
-- **RTO/RPO Targets**: 4-hour RTO, 15-minute RPO
+### Infrastructure Recovery
+- **Infrastructure as Code**: Complete infrastructure recreation from Terraform
+- **GitOps Recovery**: Application state recovery through ArgoCD
+- **Multi-region Support**: Regional redundancy for critical components
 
-### Backup Automation
-- **Scheduled Backups**: Daily automated backup workflows
-- **Multi-Environment**: Production and staging backup strategies
-- **Retention Policies**: Configurable backup retention periods
-- **Cleanup Automation**: Automatic old backup removal
-- **Monitoring**: Backup success/failure alerting
+## Development & Operations
+
+### Environment Management
+- **Staging Environment**: Development and testing
+  - Cost-optimized configurations
+  - Preemptible nodes
+  - Zonal database deployment
+- **Production Environment**: Production workloads
+  - High-availability configurations
+  - Regional database deployment
+  - Enhanced monitoring and alerting
+
+### Documentation
+- **Infrastructure Documentation**: Comprehensive setup and usage guides
+- **API Documentation**: Service endpoint documentation
+- **Runbooks**: Operational procedures and troubleshooting guides
+
+### Automation
+- **Terraform Automation**: Automated infrastructure provisioning
+- **ArgoCD Automation**: Automated application deployments
+- **Backup Automation**: Scheduled backup processes
+- **Cost Optimization**: Automated resource scaling and cleanup
 
 ## Cost Management
 
 ### Resource Optimization
 - **Auto-scaling**: Dynamic resource allocation
 - **Preemptible Instances**: Cost-effective compute for non-critical workloads
-- **Storage Classes**: Optimized storage for different access patterns
-- **Reserved Instances**: Long-term compute commitments
+- **Resource Quotas**: Prevent resource over-provisioning
+- **Lifecycle Policies**: Automated cleanup of unused resources
 
-### Budget Control
-- **Budget Alerts**: Proactive cost monitoring
-- **Resource Quotas**: Prevent runaway resource usage
-- **Cost Allocation**: Environment and team-based cost tracking
-- **Optimization Recommendations**: Google Cloud recommendations
+### Cost Monitoring
+- **Infracost**: Infrastructure cost estimation in CI/CD
+- **GCP Billing**: Usage monitoring and alerting
+- **Resource Tagging**: Cost allocation and tracking
 
-## Compliance & Governance
+## Repository Structure
 
-### Security Compliance
-- **Data Encryption**: Encryption at rest and in transit
-- **Access Controls**: Role-based access control (RBAC)
-- **Audit Logging**: Comprehensive audit trails
-- **Security Scanning**: Regular vulnerability assessments
+### Infrastructure Organization
+```
+terraform/
+├── modules/           # Reusable Terraform modules
+│   ├── vpc/          # Networking infrastructure
+│   ├── kubernetes/   # GKE cluster configuration
+│   ├── postgresql/   # Database setup
+│   └── oauth-sso/    # Authentication configuration
+├── environments/     # Environment-specific configurations
+│   ├── prod/        # Production environment
+│   └── stage/       # Staging environment
+└── backend/         # Terraform backend configuration
 
-### Operational Governance
-- **Change Management**: Controlled infrastructure changes
-- **Documentation**: Comprehensive technical documentation
-- **Incident Response**: Defined incident response procedures
-- **Performance SLAs**: Service level agreements and monitoring
+argocd/              # ArgoCD configuration
+├── argocd-setup.yaml     # ArgoCD installation manifests
+└── applications/         # Application definitions
 
-### CI/CD Governance
-- **Deployment Approvals**: Manual approval for production deployments
-- **Environment Protection**: GitHub environment protection rules
-- **Security Gates**: Automated security scanning in pipelines
-- **Compliance Checks**: Automated policy compliance validation
+k8s-manifests/       # Kubernetes manifests
+├── staging/         # Staging environment manifests
+└── production/      # Production environment manifests
 
-## Technology Versions
+.github/workflows/   # CI/CD workflows
+ci/                  # CI/CD configuration and scripts
+```
 
-### Core Infrastructure
-- Terraform: >= 1.0
-- Google Cloud Provider: ~> 5.0
-- Kubernetes: GKE Stable Channel
-- PostgreSQL: 15
+## Key Features
 
-### Container Runtime
-- Docker: Latest stable
-- Kubernetes: 1.27+ (GKE managed)
-- Helm: 3.x for package management
+### Scalability
+- Auto-scaling Kubernetes clusters
+- Regional database deployment
+- Load balancing and traffic distribution
+- Horizontal pod autoscaling
 
-### Development Stack
-- Rust: 1.70+ (stable/beta matrix testing)
-- Cargo: Latest with project
-- GitHub Actions: Latest action versions
+### Security
+- Private cluster configuration
+- Workload Identity integration
+- Secret management with Google Secret Manager
+- Network segmentation with VPC
 
-### CI/CD Stack
-- ArgoCD: Latest stable release
-- GitHub Actions: v4 action versions
-- Docker: Multi-stage builds with Debian bookworm-slim
+### Reliability
+- Multi-zone deployment
+- Automated backups
+- Health checks and monitoring
+- Disaster recovery procedures
 
-### Monitoring Stack
-- Prometheus: 2.40+
-- Grafana: 9.0+
-- OpenTelemetry: 1.0+
+### Maintainability
+- Infrastructure as Code with Terraform
+- GitOps with ArgoCD
+- Comprehensive documentation
+- Automated testing and validation
 
-This technology stack provides a robust, scalable, and secure foundation for the Bro AI application, with strong emphasis on automation, observability, operational excellence, and modern DevOps practices. 
+This infrastructure stack provides a robust foundation for deploying and managing the Bro AI application with enterprise-grade security, scalability, and reliability. 
