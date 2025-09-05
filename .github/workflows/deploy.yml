@@ -123,17 +123,41 @@ jobs:
           echo "Initializing Terraform..."
           terraform init
           
-          # Get infrastructure outputs
-          echo "Retrieving cluster information..."
-          CLUSTER_NAME=$(terraform output -raw kubernetes_cluster_name)
-          CLUSTER_REGION=$(terraform output -raw kubernetes_cluster_region)
-          
-          echo "cluster-name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
-          echo "cluster-region=${CLUSTER_REGION}" >> $GITHUB_OUTPUT
-          echo "cluster-zone=${CLUSTER_REGION}" >> $GITHUB_OUTPUT
-          
-          echo "Cluster Name: ${CLUSTER_NAME}"
-          echo "Cluster Region: ${CLUSTER_REGION}"
+          # Check if infrastructure exists by looking for outputs
+          echo "Checking if infrastructure is deployed..."
+          if terraform output > /dev/null 2>&1 && [ -n "$(terraform output -json | jq -r 'keys[]' 2>/dev/null)" ]; then
+            echo "✅ Infrastructure exists, retrieving cluster information..."
+            
+            CLUSTER_NAME=$(terraform output -raw kubernetes_cluster_name 2>/dev/null || echo "")
+            CLUSTER_REGION=$(terraform output -raw kubernetes_cluster_region 2>/dev/null || echo "")
+            
+            if [ -n "$CLUSTER_NAME" ] && [ -n "$CLUSTER_REGION" ]; then
+              echo "cluster-name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
+              echo "cluster-region=${CLUSTER_REGION}" >> $GITHUB_OUTPUT
+              echo "cluster-zone=${CLUSTER_REGION}" >> $GITHUB_OUTPUT
+              
+              echo "Cluster Name: ${CLUSTER_NAME}"
+              echo "Cluster Region: ${CLUSTER_REGION}"
+            else
+              echo "⚠️ Cluster outputs are empty, infrastructure may need to be deployed"
+              echo "cluster-name=" >> $GITHUB_OUTPUT
+              echo "cluster-region=" >> $GITHUB_OUTPUT
+              echo "cluster-zone=" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "⚠️ No infrastructure found. This appears to be a fresh environment."
+            echo "💡 Infrastructure will need to be deployed first before applications can be deployed."
+            
+            # Set empty outputs for downstream jobs
+            echo "cluster-name=" >> $GITHUB_OUTPUT
+            echo "cluster-region=" >> $GITHUB_OUTPUT
+            echo "cluster-zone=" >> $GITHUB_OUTPUT
+            
+            echo "To deploy infrastructure, run:"
+            echo "cd terraform/environments/${TERRAFORM_ENV}"
+            echo "terraform plan"
+            echo "terraform apply"
+          fi
 
   validate-manifests:
     name: Validate Kubernetes Manifests
