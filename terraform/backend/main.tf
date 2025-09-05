@@ -15,6 +15,12 @@ terraform {
   }
 }
 
+# Configure the Google Cloud Provider
+provider "google" {
+  project = var.project_id
+  region  = var.region
+}
+
 # GCS bucket for storing Terraform state
 resource "google_storage_bucket" "terraform_state" {
   name          = "${var.project_id}-terraform-state"
