@@ -94,7 +94,30 @@ jobs:
           
           echo "✅ Credentials file created successfully"
           
+          # Check if the state bucket exists, if not create it
+          BUCKET_NAME="${{ secrets.GCP_PROJECT_ID }}-terraform-state"
+          echo "Checking if state bucket exists: $BUCKET_NAME"
+          
+          if ! gsutil ls -b gs://$BUCKET_NAME > /dev/null 2>&1; then
+            echo "⚠️ State bucket does not exist. Setting up backend..."
+            
+            # Setup the backend first
+            cd terraform/backend
+            terraform init
+            terraform apply -auto-approve \
+              -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+              -var="region=us-central1"
+            
+            echo "✅ Backend setup completed"
+            cd ../..
+          else
+            echo "✅ State bucket already exists"
+          fi
+          
           cd terraform/environments/${TERRAFORM_ENV}
+          
+          # Update the backend configuration with actual project ID
+          sed -i "s/YOUR_PROJECT_ID/${{ secrets.GCP_PROJECT_ID }}/g" main.tf
           
           # Initialize Terraform with backend authentication
           echo "Initializing Terraform..."
