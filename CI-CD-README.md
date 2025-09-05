@@ -238,6 +238,7 @@ gh secret set SLACK_WEBHOOK_URL --body "your-slack-webhook-url"
 ### 2. Infrastructure Deployment
 ```bash
 # Deploy infrastructure using Terraform
+# Note: Use 'stage' directory for staging environment, 'prod' for production
 cd terraform/environments/stage
 terraform init
 terraform plan

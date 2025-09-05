@@ -52,7 +52,7 @@ jobs:
           terraform_version: 1.5.0
           terraform_wrapper: false
 
-      - name: Get cluster info from Terraform
+            - name: Get cluster info from Terraform
         id: cluster-info
         run: |
           # Determine environment based on branch or input
@@ -63,19 +63,33 @@ jobs:
           else
             ENVIRONMENT="staging"
           fi
-
-          echo "Getting cluster info for environment: $ENVIRONMENT"
-
-          cd terraform/environments/${ENVIRONMENT}
+          
+          # Map environment names to Terraform directory names
+          case $ENVIRONMENT in
+            "staging")
+              TERRAFORM_ENV="stage"
+              ;;
+            "production")
+              TERRAFORM_ENV="prod"
+              ;;
+            *)
+              echo "Unknown environment: $ENVIRONMENT"
+              exit 1
+              ;;
+          esac
+          
+          echo "Getting cluster info for environment: $ENVIRONMENT (terraform dir: $TERRAFORM_ENV)"
+          
+          cd terraform/environments/${TERRAFORM_ENV}
           terraform init
-
+          
           CLUSTER_NAME=$(terraform output -raw kubernetes_cluster_name)
           CLUSTER_REGION=$(terraform output -raw kubernetes_cluster_region)
-
+          
           echo "cluster-name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
           echo "cluster-region=${CLUSTER_REGION}" >> $GITHUB_OUTPUT
           echo "cluster-zone=${CLUSTER_REGION}" >> $GITHUB_OUTPUT
-
+          
           echo "Cluster Name: ${CLUSTER_NAME}"
           echo "Cluster Region: ${CLUSTER_REGION}"
 
